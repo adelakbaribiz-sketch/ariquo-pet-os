@@ -1,23 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { analyzeSymptom, PetContext } from '@/lib/ai'
-
-function ageYears(birth?: Date | null): number | null {
-  if (!birth) return null
-  const diff = Date.now() - birth.getTime()
-  return Math.max(0, Math.round((diff / (365.25 * 24 * 3600 * 1000)) * 10) / 10)
-}
+import { analyzeSymptom } from '@/lib/ai'
+import { findOwnedPet } from '@/lib/session'
+import { aiErrorResponse, MAX_TEXT, petContext } from '@/lib/ai-route'
 
 // POST /api/ai/symptom  { petId, text }
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const body = await req.json().catch(() => null)
   const { petId, text } = body ?? {}
-  if (!petId || !text) {
+  if (typeof petId !== 'string' || typeof text !== 'string' || !text.trim()) {
     return NextResponse.json({ error: 'petId and text required' }, { status: 400 })
   }
+  if (text.length > MAX_TEXT) {
+    return NextResponse.json({ error: `Description too long (max ${MAX_TEXT} characters)` }, { status: 400 })
+  }
 
-  const pet = await db.pet.findUnique({ where: { id: petId } })
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 })
+  const { pet, error } = await findOwnedPet(petId)
+  if (error) return error
 
   const recentEvents = await db.medicalEvent.findMany({
     where: { petId },
@@ -28,21 +27,14 @@ export async function POST(req: NextRequest) {
     .map((e) => `${new Date(e.date).toLocaleDateString()}: ${e.title}`)
     .join('; ')
 
-  const ctx: PetContext = {
-    name: pet.name,
-    species: pet.species,
-    breed: pet.breed,
-    sex: pet.sex,
-    ageYears: ageYears(pet.birthDate),
-    weightKg: pet.weightKg,
-    neutered: pet.neutered,
-    allergies: pet.allergies,
-    recentHistory,
+  let result
+  try {
+    result = await analyzeSymptom(text, petContext(pet, recentHistory))
+  } catch (err) {
+    return aiErrorResponse(err)
   }
 
-  const result = await analyzeSymptom(text, ctx)
-
-  // Persist assessment as longitudinal record (auditable).
+  // Persist only real AI output as a longitudinal, auditable record.
   const assessment = await db.aIAssessment.create({
     data: {
       petId,

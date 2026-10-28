@@ -285,7 +285,7 @@ function PetHeader({ pet, onEdit }: { pet: Pet; onEdit: () => void }) {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
+                  <h1 className="font-display truncate text-3xl font-semibold tracking-tight sm:text-4xl">
                     {pet.name}
                   </h1>
                   <Badge
@@ -401,7 +401,7 @@ function OverviewTab({ pet }: { pet: PetDetail }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <section className="grid grid-cols-2 gap-3 lg:col-span-3">
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:col-span-3">
         <StatCard
           icon={<Weight className="size-4" />}
           label="Latest weight"

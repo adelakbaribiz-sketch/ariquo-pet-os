@@ -9,7 +9,7 @@
  */
 
 import * as React from 'react'
-import { useApp } from '@/lib/store'
+import { applyHash, stateToHash, useApp } from '@/lib/store'
 
 const LandingPage = React.lazy(() =>
   import('@/components/landing/landing-page').then((m) => ({ default: m.default })),
@@ -29,8 +29,34 @@ function FullScreenLoader() {
   )
 }
 
+/** Two-way sync between the navigation store and `location.hash`. */
+function useHashRouting() {
+  React.useEffect(() => {
+    applyHash(window.location.hash)
+    const onPop = () => applyHash(window.location.hash)
+    window.addEventListener('hashchange', onPop)
+    window.addEventListener('popstate', onPop)
+
+    const unsub = useApp.subscribe((s, prev) => {
+      if (s.view === prev.view && s.section === prev.section && s.activePetId === prev.activePetId) return
+      const next = stateToHash(s)
+      if (next !== window.location.hash) {
+        const url = next || window.location.pathname + window.location.search
+        window.history.pushState(null, '', url)
+      }
+      if (s.view !== prev.view || s.section !== prev.section) window.scrollTo({ top: 0 })
+    })
+    return () => {
+      unsub()
+      window.removeEventListener('hashchange', onPop)
+      window.removeEventListener('popstate', onPop)
+    }
+  }, [])
+}
+
 export default function Home() {
   const view = useApp((s) => s.view)
+  useHashRouting()
 
   return (
     <React.Suspense fallback={<FullScreenLoader />}>

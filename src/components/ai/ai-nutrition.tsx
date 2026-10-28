@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { apiError, errorMessage } from '@/lib/api-error'
 import { Loader2, Send, Utensils } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -55,11 +56,11 @@ function NutritionInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ petId: selectedPet, question: q }),
       })
-      if (!res.ok) throw new Error('Request failed')
+      if (!res.ok) throw await apiError(res, 'Request failed')
       const data = (await res.json()) as { answer: string }
       setMessages((m) => [...m, { role: 'assistant', content: data.answer }])
-    } catch {
-      toast.error('Could not get a response. Please try again.')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not get a response. Please try again.'))
     } finally {
       setLoading(false)
       inputRef.current?.focus()

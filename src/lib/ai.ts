@@ -1,4 +1,7 @@
 import 'server-only'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import ZAI from 'z-ai-web-dev-sdk'
 
 /**
@@ -27,11 +30,115 @@ export interface AIResult {
   disclaimer: string
 }
 
+// ---------------------------------------------------------------------------
+// Provider layer
+//
+// Two interchangeable backends:
+//   1. Any OpenAI-compatible Chat Completions API — set AI_API_KEY (and
+//      optionally AI_BASE_URL / AI_MODEL / AI_VISION_MODEL).
+//   2. The z-ai-web-dev-sdk — used when a .z-ai-config file is present
+//      (project dir, home dir or /etc), or when AI_PROVIDER=zai.
+// With neither configured, every call throws AIUnavailableError and the API
+// routes answer 503. Nothing is fabricated or persisted on failure.
+// ---------------------------------------------------------------------------
+
+export class AIUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AIUnavailableError'
+  }
+}
+
+type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant'
+  content: string | ContentPart[]
+}
+
+type ProviderKind = 'openai' | 'zai' | 'none'
+
+function zaiConfigPresent(): boolean {
+  const candidates = [
+    path.join(process.cwd(), '.z-ai-config'),
+    path.join(os.homedir(), '.z-ai-config'),
+    '/etc/.z-ai-config',
+  ]
+  return candidates.some((p) => {
+    try {
+      return fs.statSync(p).isFile()
+    } catch {
+      return false
+    }
+  })
+}
+
+export function aiProvider(): ProviderKind {
+  if (process.env.AI_API_KEY) return 'openai'
+  if (process.env.AI_PROVIDER === 'zai' || zaiConfigPresent()) return 'zai'
+  return 'none'
+}
+
 let zaiSingleton: Awaited<ReturnType<typeof ZAI.create>> | null = null
 
 async function getZai() {
   if (!zaiSingleton) zaiSingleton = await ZAI.create()
   return zaiSingleton
+}
+
+async function openAIChat(messages: ChatMessage[], vision: boolean): Promise<string> {
+  const base = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+  const model = vision
+    ? process.env.AI_VISION_MODEL || process.env.AI_MODEL || 'gpt-4o-mini'
+    : process.env.AI_MODEL || 'gpt-4o-mini'
+  const res = await fetch(`${base}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.AI_API_KEY}`,
+    },
+    body: JSON.stringify({ model, messages, temperature: 0.3 }),
+    signal: AbortSignal.timeout(60_000),
+  })
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '')
+    throw new Error(`AI provider responded ${res.status}: ${detail.slice(0, 300)}`)
+  }
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[]
+  }
+  return data.choices?.[0]?.message?.content ?? ''
+}
+
+async function chat(messages: ChatMessage[], opts: { vision?: boolean } = {}): Promise<string> {
+  const kind = aiProvider()
+  if (kind === 'none') {
+    throw new AIUnavailableError(
+      'AI is not configured on this server. Set AI_API_KEY (OpenAI-compatible) or provide a .z-ai-config file — see README.',
+    )
+  }
+  try {
+    if (kind === 'openai') return await openAIChat(messages, !!opts.vision)
+    const zai = await getZai()
+    if (opts.vision) {
+      const completion = await zai.chat.completions.createVision({
+        model: process.env.AI_VISION_MODEL || 'glm-4.5v',
+        messages: messages as never,
+        thinking: { type: 'disabled' },
+      })
+      return completion.choices[0]?.message?.content ?? ''
+    }
+    const completion = await zai.chat.completions.create({
+      messages: messages as never,
+      thinking: { type: 'disabled' },
+    })
+    return completion.choices[0]?.message?.content ?? ''
+  } catch (err) {
+    console.error('[ai.chat]', err)
+    throw new AIUnavailableError('The AI service could not be reached. Please try again shortly.')
+  }
 }
 
 const DISCLAIMER =
@@ -126,32 +233,14 @@ export async function analyzeSymptom(
   userText: string,
   pet: PetContext,
 ): Promise<AIResult> {
-  try {
-    const zai = await getZai()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        { role: 'assistant', content: SAFETY_PREAMBLE },
-        {
-          role: 'user',
-          content: `Pet profile:\n${petContextLine(pet)}\n\nOwner observation:\n${userText}\n\nProvide your triage JSON now.`,
-        },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const raw = completion.choices[0]?.message?.content ?? ''
-    return buildResult(parseAIJson(raw))
-  } catch (err) {
-    console.error('[ai.analyzeSymptom]', err)
-    return {
-      observations: 'Unable to reach AI triage service right now.',
-      riskLevel: 'UNKNOWN',
-      confidence: 0,
-      recommendations:
-        'If your pet is in acute distress (breathing difficulty, collapse, seizures, severe bleeding, repeated vomiting, inability to urinate), go to the nearest emergency veterinarian immediately.',
-      escalation: 'Emergency vet if acute distress',
-      disclaimer: DISCLAIMER,
-    }
-  }
+  const raw = await chat([
+    { role: 'system', content: SAFETY_PREAMBLE },
+    {
+      role: 'user',
+      content: `Pet profile:\n${petContextLine(pet)}\n\nOwner observation:\n${userText}\n\nProvide your triage JSON now.`,
+    },
+  ])
+  return buildResult(parseAIJson(raw))
 }
 
 /** Vision-based image analysis (skin / dental / eye / ear / general). */
@@ -173,41 +262,23 @@ export async function analyzeImage(
       'Analyze this image for any visible abnormality on or around the pet. Do NOT diagnose — observe and triage.',
   }
 
-  try {
-    const zai = await getZai()
-    const completion = await zai.chat.completions.createVision({
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: SAFETY_PREAMBLE },
-            {
-              type: 'text',
-              text: `Pet profile:\n${petContextLine(pet)}\n\n${modulePrompts[module]}\n\nReturn your triage JSON only.`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: imageDataUrl },
-            },
-          ],
-        },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const raw = completion.choices[0]?.message?.content ?? ''
-    return buildResult(parseAIJson(raw))
-  } catch (err) {
-    console.error('[ai.analyzeImage]', err)
-    return {
-      observations: 'Unable to reach AI vision service right now.',
-      riskLevel: 'UNKNOWN',
-      confidence: 0,
-      recommendations:
-        'If the area looks infected, swollen, painful, or is getting worse, contact your veterinarian.',
-      escalation: 'Veterinarian if worsening',
-      disclaimer: DISCLAIMER,
-    }
-  }
+  const raw = await chat(
+    [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: SAFETY_PREAMBLE },
+          {
+            type: 'text',
+            text: `Pet profile:\n${petContextLine(pet)}\n\n${modulePrompts[module]}\n\nReturn your triage JSON only.`,
+          },
+          { type: 'image_url', image_url: { url: imageDataUrl } },
+        ],
+      },
+    ],
+    { vision: true },
+  )
+  return buildResult(parseAIJson(raw))
 }
 
 /** Nutrition advisor — non-diagnostic. */
@@ -215,24 +286,14 @@ export async function nutritionAdvice(
   question: string,
   pet: PetContext,
 ): Promise<string> {
-  try {
-    const zai = await getZai()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are Ariquo’s AI Nutritionist. Provide practical, evidence-informed nutrition guidance for companion animals. Do NOT diagnose. Be concise (max 220 words). Use short paragraphs or bullet points. Always recommend consulting a veterinarian for medical nutrition (kidney disease, diabetes, allergies, weight-loss plans). Pet profile:\n${petContextLine(pet)}`,
-        },
-        { role: 'user', content: question },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const text = completion.choices[0]?.message?.content ?? ''
-    return `${text}\n\n*${DISCLAIMER}*`
-  } catch (err) {
-    console.error('[ai.nutritionAdvice]', err)
-    return `I couldn’t reach the AI nutrition service right now. For medical nutrition needs (allergies, kidney disease, diabetes, weight loss), please consult your veterinarian.\n\n*${DISCLAIMER}*`
-  }
+  const text = await chat([
+    {
+      role: 'system',
+      content: `You are Ariquo’s AI Nutritionist. Provide practical, evidence-informed nutrition guidance for companion animals. Do NOT diagnose. Be concise (max 220 words). Use short paragraphs or bullet points. Always recommend consulting a veterinarian for medical nutrition (kidney disease, diabetes, allergies, weight-loss plans). Pet profile:\n${petContextLine(pet)}`,
+    },
+    { role: 'user', content: question },
+  ])
+  return `${text}\n\n*${DISCLAIMER}*`
 }
 
 /** Behavior advisor — non-diagnostic. */
@@ -240,24 +301,14 @@ export async function behaviorAdvice(
   question: string,
   pet: PetContext,
 ): Promise<string> {
-  try {
-    const zai = await getZai()
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are Ariquo’s AI Behavior Advisor. Provide practical, force-free, evidence-informed guidance for common companion-animal behavior topics. Be concise (max 220 words). Use bullet points. Always recommend a qualified trainer/behaviorist or veterinarian for serious or sudden behavior change (possible pain or illness). Pet profile:\n${petContextLine(pet)}`,
-        },
-        { role: 'user', content: question },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    const text = completion.choices[0]?.message?.content ?? ''
-    return `${text}\n\n*${DISCLAIMER}*`
-  } catch (err) {
-    console.error('[ai.behaviorAdvice]', err)
-    return `I couldn’t reach the AI behavior service right now. For sudden behavior change, please consult your veterinarian to rule out pain or illness.\n\n*${DISCLAIMER}*`
-  }
+  const text = await chat([
+    {
+      role: 'system',
+      content: `You are Ariquo’s AI Behavior Advisor. Provide practical, force-free, evidence-informed guidance for common companion-animal behavior topics. Be concise (max 220 words). Use bullet points. Always recommend a qualified trainer/behaviorist or veterinarian for serious or sudden behavior change (possible pain or illness). Pet profile:\n${petContextLine(pet)}`,
+    },
+    { role: 'user', content: question },
+  ])
+  return `${text}\n\n*${DISCLAIMER}*`
 }
 
 /** Generate an AI summary of a pet’s longitudinal record (for professional dashboard). */
@@ -265,32 +316,20 @@ export async function summarizePetHistory(
   pet: PetContext,
   events: { type: string; title: string; date: string; notes?: string | null }[],
 ): Promise<string> {
-  try {
-    const zai = await getZai()
-    const eventsText = events
-      .slice(0, 25)
-      .map(
-        (e) =>
-          `- ${new Date(e.date).toLocaleDateString()} — [${e.type}] ${e.title}${e.notes ? `: ${e.notes}` : ''}`,
-      )
-      .join('\n')
+  const eventsText = events
+    .slice(0, 25)
+    .map(
+      (e) =>
+        `- ${new Date(e.date).toLocaleDateString()} — [${e.type}] ${e.title}${e.notes ? `: ${e.notes}` : ''}`,
+    )
+    .join('\n')
 
-    const completion = await zai.chat.completions.create({
-      messages: [
-        {
-          role: 'assistant',
-          content: `You are Ariquo’s AI Clinical Summarizer. Produce a brief clinical summary (max 180 words) of the pet’s longitudinal record for a veterinarian. Use bullet points. Highlight: chronic conditions, recent events, vaccinations due, medications, and follow-ups. Do NOT diagnose — only summarize what is documented. Pet profile:\n${petContextLine(pet)}`,
-        },
-        {
-          role: 'user',
-          content: `Recorded events:\n${eventsText || 'No events recorded.'}`,
-        },
-      ],
-      thinking: { type: 'disabled' },
-    })
-    return completion.choices[0]?.message?.content ?? 'No summary available.'
-  } catch (err) {
-    console.error('[ai.summarizePetHistory]', err)
-    return 'Unable to generate AI summary at this time.'
-  }
+  const text = await chat([
+    {
+      role: 'system',
+      content: `You are Ariquo’s AI Clinical Summarizer. Produce a brief clinical summary (max 180 words) of the pet’s longitudinal record for a veterinarian. Use bullet points. Highlight: chronic conditions, recent events, vaccinations due, medications, and follow-ups. Do NOT diagnose — only summarize what is documented. Pet profile:\n${petContextLine(pet)}`,
+    },
+    { role: 'user', content: `Recorded events:\n${eventsText || 'No events recorded.'}` },
+  ])
+  return text || 'No summary available.'
 }

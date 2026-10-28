@@ -1,23 +1,51 @@
 import { db } from './db'
 
 // Seed data for the Ariquo Pet OS demo.
-// Run via: bun run scripts/seed.ts
+// Run via: bun run db:seed            (skips if demo data already exists)
+//          bun run db:seed -- --reset (wipes demo owner + providers, then reseeds)
 
 const SPECIES = {
   dog: 'DOG',
   cat: 'CAT',
 } as const
 
+// The demo story was authored around an "anchor" date. Every timeline date is
+// shifted by the same offset so the record always looks current: recent
+// events stay recent and reminders/boosters stay upcoming, whenever you seed.
+const ANCHOR = new Date('2024-11-05T00:00:00Z').getTime()
+const OFFSET_MS = Date.now() - ANCHOR
+function D(iso: string): Date {
+  return new Date(new Date(iso).getTime() + OFFSET_MS)
+}
+
+const DEMO_EMAIL = 'sara.demo@ariquo.io'
+
 async function main() {
+  const reset = process.argv.includes('--reset')
+
+  const existing = await db.owner.findUnique({
+    where: { email: DEMO_EMAIL },
+    include: { _count: { select: { pets: true } } },
+  })
+  if (existing && existing._count.pets > 0 && !reset) {
+    console.log('ℹ️  Demo data already present — skipping. Use `--reset` to reseed.')
+    return
+  }
+  if (reset) {
+    console.log('♻️  Resetting demo owner and marketplace providers...')
+    await db.owner.deleteMany({ where: { email: DEMO_EMAIL } })
+    await db.provider.deleteMany({})
+  }
+
   console.log('🌱 Seeding Ariquo demo data...')
 
   // ── Owner ─────────────────────────────────────────────
   const owner = await db.owner.upsert({
-    where: { email: 'sara.demo@ariquo.io' },
+    where: { email: DEMO_EMAIL },
     update: {},
     create: {
       name: 'Sara Ahmadi',
-      email: 'sara.demo@ariquo.io',
+      email: DEMO_EMAIL,
       phone: '+49 30 12345678',
       city: 'Berlin',
       country: 'Germany',
@@ -44,10 +72,10 @@ async function main() {
       notes: 'Very active. Loves swimming. Slight limp in left hind leg after long runs.',
       weightLogs: {
         create: [
-          { weightKg: 28.2, loggedAt: new Date('2024-01-10') },
-          { weightKg: 29.1, loggedAt: new Date('2024-04-12') },
-          { weightKg: 30.0, loggedAt: new Date('2024-07-18') },
-          { weightKg: 30.5, loggedAt: new Date('2024-10-22') },
+          { weightKg: 28.2, loggedAt: D('2024-01-10') },
+          { weightKg: 29.1, loggedAt: D('2024-04-12') },
+          { weightKg: 30.0, loggedAt: D('2024-07-18') },
+          { weightKg: 30.5, loggedAt: D('2024-10-22') },
         ],
       },
     },
@@ -71,10 +99,10 @@ async function main() {
       notes: 'Indoor cat. Slightly overweight. Drinks more water lately.',
       weightLogs: {
         create: [
-          { weightKg: 4.2, loggedAt: new Date('2024-02-02') },
-          { weightKg: 4.5, loggedAt: new Date('2024-05-09') },
-          { weightKg: 4.7, loggedAt: new Date('2024-08-15') },
-          { weightKg: 4.8, loggedAt: new Date('2024-11-01') },
+          { weightKg: 4.2, loggedAt: D('2024-02-02') },
+          { weightKg: 4.5, loggedAt: D('2024-05-09') },
+          { weightKg: 4.7, loggedAt: D('2024-08-15') },
+          { weightKg: 4.8, loggedAt: D('2024-11-01') },
         ],
       },
     },
@@ -86,20 +114,20 @@ async function main() {
       {
         petId: milo.id,
         name: 'Rabies',
-        date: new Date('2024-03-01'),
-        nextDue: new Date('2025-03-01'),
+        date: D('2024-03-01'),
+        nextDue: D('2025-03-01'),
       },
       {
         petId: milo.id,
         name: 'DHPP (Distemper combo)',
-        date: new Date('2024-04-10'),
-        nextDue: new Date('2025-04-10'),
+        date: D('2024-04-10'),
+        nextDue: D('2025-04-10'),
       },
       {
         petId: milo.id,
         name: 'Bordetella',
-        date: new Date('2024-09-05'),
-        nextDue: new Date('2025-09-05'),
+        date: D('2024-09-05'),
+        nextDue: D('2025-09-05'),
       },
     ],
   })
@@ -111,7 +139,7 @@ async function main() {
         name: 'Glucosamine joint supplement',
         dose: '1 tablet',
         frequency: 'Daily with food',
-        startDate: new Date('2024-06-01'),
+        startDate: D('2024-06-01'),
         active: true,
         notes: 'For joint support',
       },
@@ -120,7 +148,7 @@ async function main() {
         name: 'Bravecto (tick/flea)',
         dose: '1 chew',
         frequency: 'Every 12 weeks',
-        startDate: new Date('2024-09-01'),
+        startDate: D('2024-09-01'),
         active: true,
       },
     ],
@@ -132,7 +160,7 @@ async function main() {
         petId: milo.id,
         type: 'VISIT',
         title: 'Annual wellness exam',
-        date: new Date('2024-03-12'),
+        date: D('2024-03-12'),
         notes: 'Healthy. Heart and lungs clear. Teeth in good condition.',
         severity: 'ROUTINE',
       },
@@ -140,7 +168,7 @@ async function main() {
         petId: milo.id,
         type: 'IMAGING',
         title: 'Hip X-ray',
-        date: new Date('2024-07-22'),
+        date: D('2024-07-22'),
         notes: 'Mild hip dysplasia signs. Recommend joint supplement and weight management.',
         severity: 'OBSERVATION',
       },
@@ -148,7 +176,7 @@ async function main() {
         petId: milo.id,
         type: 'LAB',
         title: 'Blood panel',
-        date: new Date('2024-03-12'),
+        date: D('2024-03-12'),
         notes: 'All values within normal range.',
         severity: 'ROUTINE',
       },
@@ -156,7 +184,7 @@ async function main() {
         petId: milo.id,
         type: 'SYMPTOM',
         title: 'Mild limp after long run',
-        date: new Date('2024-10-30'),
+        date: D('2024-10-30'),
         notes: 'Limping on left hind leg after 8km run. Resolved after 24h rest.',
         severity: 'OBSERVATION',
       },
@@ -169,19 +197,19 @@ async function main() {
         petId: milo.id,
         title: 'Rabies booster',
         type: 'VACCINE',
-        dueAt: new Date('2025-03-01'),
+        dueAt: D('2025-03-01'),
       },
       {
         petId: milo.id,
         title: 'Annual wellness check',
         type: 'VET_APPOINTMENT',
-        dueAt: new Date('2025-03-12'),
+        dueAt: D('2025-03-12'),
       },
       {
         petId: milo.id,
         title: 'Bravecto (tick/flea)',
         type: 'MEDICATION',
-        dueAt: new Date('2024-12-01'),
+        dueAt: D('2024-12-01'),
       },
     ],
   })
@@ -192,14 +220,14 @@ async function main() {
       {
         petId: luna.id,
         name: 'Rabies',
-        date: new Date('2024-08-15'),
-        nextDue: new Date('2025-08-15'),
+        date: D('2024-08-15'),
+        nextDue: D('2025-08-15'),
       },
       {
         petId: luna.id,
         name: 'FVRCP (Feline combo)',
-        date: new Date('2024-09-01'),
-        nextDue: new Date('2025-09-01'),
+        date: D('2024-09-01'),
+        nextDue: D('2025-09-01'),
       },
     ],
   })
@@ -211,7 +239,7 @@ async function main() {
         name: 'Frontline (flea)',
         dose: '1 pipette',
         frequency: 'Monthly',
-        startDate: new Date('2024-09-01'),
+        startDate: D('2024-09-01'),
         active: true,
       },
     ],
@@ -223,7 +251,7 @@ async function main() {
         petId: luna.id,
         type: 'VISIT',
         title: 'Dental cleaning',
-        date: new Date('2024-05-20'),
+        date: D('2024-05-20'),
         notes: 'Mild tartar. Scaled and polished.',
         severity: 'ROUTINE',
       },
@@ -231,7 +259,7 @@ async function main() {
         petId: luna.id,
         type: 'SYMPTOM',
         title: 'Increased water intake',
-        date: new Date('2024-10-15'),
+        date: D('2024-10-15'),
         notes: 'Owner reports Luna drinks more water than usual. Monitoring recommended.',
         severity: 'OBSERVATION',
       },
@@ -244,13 +272,13 @@ async function main() {
         petId: luna.id,
         title: 'Weight check',
         type: 'VET_APPOINTMENT',
-        dueAt: new Date('2024-12-15'),
+        dueAt: D('2024-12-15'),
       },
       {
         petId: luna.id,
         title: 'FVRCP booster',
         type: 'VACCINE',
-        dueAt: new Date('2025-09-01'),
+        dueAt: D('2025-09-01'),
       },
     ],
   })
@@ -268,6 +296,7 @@ async function main() {
       recommendations:
         'Rest for 48h, ice pack, monitor. If limp persists or recurs, schedule veterinary orthopedic exam. Continue joint supplement.',
       escalation: 'See veterinarian soon if recurrent',
+      createdAt: D('2024-10-31T10:00:00'),
     },
   })
 
@@ -283,6 +312,7 @@ async function main() {
       recommendations:
         'Recommend veterinary visit within 2 weeks for blood panel (kidney, glucose, T4) and urinalysis.',
       escalation: 'See veterinarian soon',
+      createdAt: D('2024-10-16T18:30:00'),
     },
   })
 
@@ -513,7 +543,7 @@ async function main() {
       ownerId: owner.id,
       providerId: createdProviders[0].id,
       petId: milo.id,
-      scheduledAt: new Date('2024-03-12T10:00:00'),
+      scheduledAt: D('2024-03-12T10:00:00'),
       status: 'COMPLETED',
       notes: 'Annual wellness exam',
       price: 55,
@@ -525,10 +555,35 @@ async function main() {
       ownerId: owner.id,
       providerId: createdProviders[2].id,
       petId: luna.id,
-      scheduledAt: new Date('2024-05-20T14:00:00'),
+      scheduledAt: D('2024-05-20T14:00:00'),
       status: 'COMPLETED',
       notes: 'Dental cleaning',
       price: 90,
+    },
+  })
+
+  // ── Upcoming bookings (so the marketplace & pro view have live items) ──
+  await db.booking.create({
+    data: {
+      ownerId: owner.id,
+      providerId: createdProviders[0].id,
+      petId: luna.id,
+      scheduledAt: D('2024-11-12T09:30:00'),
+      status: 'CONFIRMED',
+      notes: 'Blood panel + urinalysis (increased thirst follow-up)',
+      price: 180,
+    },
+  })
+
+  await db.booking.create({
+    data: {
+      ownerId: owner.id,
+      providerId: createdProviders[2].id,
+      petId: milo.id,
+      scheduledAt: D('2024-11-16T11:00:00'),
+      status: 'PENDING',
+      notes: 'Full grooming before winter',
+      price: 75,
     },
   })
 

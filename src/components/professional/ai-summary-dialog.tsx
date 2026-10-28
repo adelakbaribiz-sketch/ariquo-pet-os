@@ -18,6 +18,7 @@
  */
 
 import * as React from 'react'
+import { apiError } from '@/lib/api-error'
 import { useQuery } from '@tanstack/react-query'
 import {
   CartesianGrid,
@@ -150,7 +151,7 @@ function AiSummaryBody({ petId }: { petId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ petId }),
       })
-      if (!r.ok) throw new Error('Failed to generate AI summary')
+      if (!r.ok) throw await apiError(r, 'Failed to generate AI summary')
       const data = (await r.json()) as { summary: string }
       return data.summary
     },
@@ -216,6 +217,7 @@ function AiSummaryBody({ petId }: { petId: string }) {
               <SummaryLoading />
             ) : summaryQuery.isError ? (
               <SummaryError
+                message={summaryQuery.error?.message}
                 onRetry={() => summaryQuery.refetch()}
               />
             ) : summaryQuery.data ? (
@@ -352,13 +354,13 @@ function SummaryLoading() {
   )
 }
 
-function SummaryError({ onRetry }: { onRetry: () => void }) {
+function SummaryError({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
     <Alert variant="destructive">
       <ShieldAlert className="size-4" />
       <AlertTitle>Could not generate AI summary</AlertTitle>
       <AlertDescription>
-        The AI service is unavailable or returned an error. You can retry — if
+        {message || 'The AI service is unavailable or returned an error.'} You can retry — if
         the issue persists, please fall back to the longitudinal record below.
       </AlertDescription>
       <div className="col-start-2 mt-2">

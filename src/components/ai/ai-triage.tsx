@@ -1,6 +1,7 @@
 'use client'
 
 import * as React from 'react'
+import { apiError, errorMessage } from '@/lib/api-error'
 import { motion } from 'framer-motion'
 import { Activity, AlertTriangle, Loader2, MapPin, Send, Stethoscope } from 'lucide-react'
 import { toast } from 'sonner'
@@ -55,11 +56,11 @@ function TriageInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ petId: selectedPet, text: text.trim() }),
       })
-      if (!res.ok) throw new Error('Request failed')
+      if (!res.ok) throw await apiError(res, 'Request failed')
       const data = (await res.json()) as { result: AiResult }
       setResult(data.result)
-    } catch {
-      toast.error('Could not analyze right now. Please try again.')
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not analyze right now. Please try again.'))
     } finally {
       setLoading(false)
     }

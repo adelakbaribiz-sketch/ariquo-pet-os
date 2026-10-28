@@ -524,15 +524,52 @@ export function SectionHeader({
   subhead: string
 }) {
   return (
-    <header className="space-y-1.5">
-      <div className="flex items-center gap-2.5">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          {icon}
+    <header className="space-y-3">
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/15">
+            {icon}
+          </div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
         </div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">{subhead}</p>
       </div>
-      <p className="max-w-2xl text-sm text-muted-foreground">{subhead}</p>
+      <AiStatusNotice />
     </header>
+  )
+}
+
+// ─────────────────────────────────────────────
+//  AiStatusNotice — tells the user up front when
+//  no AI provider is configured on the server,
+//  instead of letting every request fail silently.
+// ─────────────────────────────────────────────
+
+export function useAiStatus() {
+  return useQuery<{ configured: boolean }>({
+    queryKey: ['ai-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/ai/status')
+      if (!res.ok) throw new Error('Failed to load AI status')
+      return res.json()
+    },
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function AiStatusNotice() {
+  const { data } = useAiStatus()
+  if (!data || data.configured) return null
+  return (
+    <Alert className="border-amber-300/60 bg-amber-50/70 text-amber-900 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-200">
+      <AlertTriangle className="size-4" />
+      <AlertTitle>Live AI is not connected on this server</AlertTitle>
+      <AlertDescription className="text-amber-800/90 dark:text-amber-200/80">
+        Requests will return an error until an AI provider is configured
+        (set <code className="font-mono text-xs">AI_API_KEY</code> in <code className="font-mono text-xs">.env</code> — see README).
+        Saved assessments in each pet&apos;s record remain available.
+      </AlertDescription>
+    </Alert>
   )
 }
 

@@ -100,7 +100,7 @@ export function LostPet() {
                 <ShieldAlert className="size-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
                   Lost &amp; found
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -159,7 +159,7 @@ function LostPetCard({ pet }: { pet: Pet }) {
         onSuccess: () => {
           toast.success(
             nextStatus === 'LOST'
-              ? `${pet.name} marked as lost. Recovery playbook activated.`
+              ? `${pet.name} marked as lost. Follow the recovery playbook below.`
               : `${pet.name} marked as found. Wonderful news!`,
           )
           setConfirm(null)
@@ -310,6 +310,30 @@ const PLAYBOOK_STEPS = [
   },
 ] as const
 
+// Shares a plain-text lost-pet notice via the OS share sheet, or copies it.
+// (A broadcast to a provider network is not implemented in the prototype.)
+async function shareLostAlert(pet: Pet) {
+  const text = [
+    `LOST ${speciesLabel(pet.species).toUpperCase()}: ${pet.name}`,
+    [pet.breed, pet.color].filter(Boolean).join(', '),
+    pet.microchipId ? `Microchip: ${pet.microchipId}` : null,
+    'If seen, please contact the owner or your local vet.',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  try {
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      await navigator.share({ title: `Lost: ${pet.name}`, text })
+      return
+    }
+    await navigator.clipboard.writeText(text)
+    toast.success('Lost-pet notice copied — paste it into chats or social posts.')
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
+    toast.error('Could not share or copy the notice on this device.')
+  }
+}
+
 function LostPlaybook({ pet }: { pet: Pet }) {
   return (
     <div className="mt-1 space-y-3">
@@ -352,12 +376,10 @@ function LostPlaybook({ pet }: { pet: Pet }) {
           variant="outline"
           size="sm"
           className="gap-1.5"
-          onClick={() =>
-            toast.info('Sharing lost-pet alert with the Ariquo network…')
-          }
+          onClick={() => shareLostAlert(pet)}
         >
           <Share2 className="size-4" />
-          Share alert
+          Share notice
         </Button>
       </div>
     </div>

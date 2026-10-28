@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { findOwnedPet } from '@/lib/session'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -8,10 +9,13 @@ interface Params {
 // POST /api/pets/[id]/weight — append a weight log entry
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
+  const owned = await findOwnedPet(id)
+  if (owned.error) return owned.error
   const body = await req.json()
   const { weightKg } = body ?? {}
-  if (weightKg == null || isNaN(Number(weightKg))) {
-    return NextResponse.json({ error: 'weightKg required' }, { status: 400 })
+  const kg = Number(weightKg)
+  if (weightKg == null || !Number.isFinite(kg) || kg <= 0 || kg > 150) {
+    return NextResponse.json({ error: 'weightKg must be a number between 0 and 150' }, { status: 400 })
   }
   const log = await db.weightLog.create({
     data: { petId: id, weightKg: Number(weightKg) },

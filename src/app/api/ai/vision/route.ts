@@ -1,26 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { analyzeImage, PetContext } from '@/lib/ai'
+import { analyzeImage } from '@/lib/ai'
+import { findOwnedPet } from '@/lib/session'
+import { aiErrorResponse, petContext } from '@/lib/ai-route'
 
-function ageYears(birth?: Date | null): number | null {
-  if (!birth) return null
-  const diff = Date.now() - birth.getTime()
-  return Math.max(0, Math.round((diff / (365.25 * 24 * 3600 * 1000)) * 10) / 10)
-}
+const VALID_MODULES = ['VISION_SKIN', 'VISION_DENTAL', 'VISION_EYE', 'VISION_EAR', 'VISION_GENERAL'] as const
+type VisionModule = (typeof VALID_MODULES)[number]
 
 // POST /api/ai/vision  { petId, module, image (data URL) }
 export async function POST(req: NextRequest) {
-  const body = await req.json()
+  const body = await req.json().catch(() => null)
   const { petId, module, image } = body ?? {}
-  if (!petId || !image || !module) {
+  if (typeof petId !== 'string' || typeof image !== 'string' || !module) {
     return NextResponse.json(
       { error: 'petId, module, and image required' },
       { status: 400 },
     )
   }
-  const valid = ['VISION_SKIN', 'VISION_DENTAL', 'VISION_EYE', 'VISION_EAR', 'VISION_GENERAL']
-  if (!valid.includes(module)) {
+  if (!VALID_MODULES.includes(module)) {
     return NextResponse.json({ error: 'Invalid module' }, { status: 400 })
+  }
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(image)) {
+    return NextResponse.json({ error: 'Image must be a PNG, JPEG, WebP or GIF data URL' }, { status: 400 })
   }
 
   // Limit image size to ~6MB to keep things sane.
@@ -31,25 +32,15 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const pet = await db.pet.findUnique({ where: { id: petId } })
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 })
+  const { pet, error } = await findOwnedPet(petId)
+  if (error) return error
 
-  const ctx: PetContext = {
-    name: pet.name,
-    species: pet.species,
-    breed: pet.breed,
-    sex: pet.sex,
-    ageYears: ageYears(pet.birthDate),
-    weightKg: pet.weightKg,
-    neutered: pet.neutered,
-    allergies: pet.allergies,
+  let result
+  try {
+    result = await analyzeImage(image, module as VisionModule, petContext(pet))
+  } catch (err) {
+    return aiErrorResponse(err)
   }
-
-  const result = await analyzeImage(
-    image,
-    module as Parameters<typeof analyzeImage>[1],
-    ctx,
-  )
 
   const assessment = await db.aIAssessment.create({
     data: {

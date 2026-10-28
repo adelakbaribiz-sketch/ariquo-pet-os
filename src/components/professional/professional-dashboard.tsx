@@ -93,7 +93,7 @@ export function ProfessionalDashboard() {
                 <Stethoscope className="size-6" />
               </span>
               <div className="flex flex-col gap-1">
-                <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
                   Professional Dashboard
                 </h1>
                 <p className="text-sm text-muted-foreground max-w-2xl">

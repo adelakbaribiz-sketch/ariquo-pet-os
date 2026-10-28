@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { findOwnedPet } from '@/lib/session'
 
 interface Params {
   params: Promise<{ id: string }>
@@ -8,6 +9,8 @@ interface Params {
 // GET /api/pets/[id]/medications
 export async function GET(_req: NextRequest, { params }: Params) {
   const { id } = await params
+  const owned = await findOwnedPet(id)
+  if (owned.error) return owned.error
   const medications = await db.medication.findMany({
     where: { petId: id },
     orderBy: { startDate: 'desc' },
@@ -18,6 +21,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
 // POST /api/pets/[id]/medications
 export async function POST(req: NextRequest, { params }: Params) {
   const { id } = await params
+  const owned = await findOwnedPet(id)
+  if (owned.error) return owned.error
   const body = await req.json()
   const { name, dose, frequency, startDate, endDate, notes, active } = body ?? {}
   if (!name) {

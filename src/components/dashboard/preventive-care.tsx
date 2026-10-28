@@ -119,7 +119,7 @@ export function PreventiveCare() {
                 <ShieldCheck className="size-6" />
               </div>
               <div>
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
                   Preventive care
                 </h1>
                 <p className="text-sm text-muted-foreground">

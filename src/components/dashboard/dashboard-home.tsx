@@ -34,6 +34,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { AddPetDialog } from '@/components/dashboard/add-pet-dialog'
+import {
+  AttentionPanel,
+  CareActivityChart,
+  DashboardHero,
+  NextAppointments,
+  useAttentionItems,
+} from '@/components/dashboard/care-insights'
 import { useApp } from '@/lib/store'
 import {
   usePetDetails,
@@ -115,6 +122,8 @@ export function DashboardHome() {
     [upcoming],
   )
 
+  const attention = useAttentionItems(details)
+
   if (isLoading) return <DashboardSkeleton />
   if (error) {
     return (
@@ -140,7 +149,12 @@ export function DashboardHome() {
 
   return (
     <div className="grid gap-6">
-      <Header petsCount={pets.length} onAdd={() => setAddOpen(true)} />
+      <DashboardHero
+        pets={pets}
+        attentionCount={attention.length}
+        nextUp={upcoming.find((r) => !isOverdue(r.dueAt)) ?? null}
+        onAdd={() => setAddOpen(true)}
+      />
 
       {/* Summary cards */}
       <section
@@ -149,32 +163,46 @@ export function DashboardHome() {
       >
         <SummaryCard
           icon={<PawPrint className="size-5" />}
-          label="Your pets"
+          label="Pets in care"
+          hint="Lifelong records"
           value={pets.length}
           accent="primary"
         />
         <SummaryCard
           icon={<CalendarClock className="size-5" />}
-          label="Upcoming in 30 days"
+          label="Due in 30 days"
+          hint="Vaccines, meds & visits"
           value={upcomingNext30}
           accent={upcomingNext30 > 0 ? 'amber' : 'muted'}
         />
         <SummaryCard
           icon={<Activity className="size-5" />}
           label="Active medications"
+          hint="Across all pets"
           value={activeMedCount}
           accent="primary"
         />
         <SummaryCard
           icon={<Sparkles className="size-5" />}
-          label="AI assessments this month"
+          label="AI checks this month"
+          hint="Observation & triage"
           value={aiThisMonth}
           accent={aiThisMonth > 0 ? 'coral' : 'muted'}
         />
       </section>
 
+      {/* Insights */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+        <div className="lg:col-span-3">
+          <CareActivityChart details={details} />
+        </div>
+        <div className="lg:col-span-2">
+          <AttentionPanel items={attention} />
+        </div>
+      </section>
+
       {/* Quick actions */}
-      <QuickActions />
+      <QuickActions onAddPet={() => setAddOpen(true)} />
 
       {/* Pets grid + Upcoming reminders */}
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -197,53 +225,14 @@ export function DashboardHome() {
             subtitle="Across all your pets, soonest first."
           />
           <UpcomingReminders items={upcoming} loading={detailsLoading} />
+          <div className="mt-4">
+            <NextAppointments details={details} />
+          </div>
         </div>
       </section>
 
       <AddPetDialog open={addOpen} onOpenChange={setAddOpen} />
     </div>
-  )
-}
-
-// ─────────────────────────────────────────────
-//  Header
-// ─────────────────────────────────────────────
-
-function Header({
-  petsCount,
-  onAdd,
-}: {
-  petsCount: number
-  onAdd: () => void
-}) {
-  return (
-    <Card className="overflow-hidden">
-      <div className="bg-radial-fade">
-        <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">
-              Welcome back
-            </p>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Your pets, in one calm place.
-            </h1>
-            <p className="max-w-prose text-sm text-muted-foreground">
-              {petsCount === 1
-                ? 'One pet in your care. Open their record below.'
-                : `${petsCount} pets in your care. Tap any pet to open their lifelong record.`}
-            </p>
-          </div>
-          <Button
-            onClick={onAdd}
-            className="h-11 gap-2 self-start sm:self-auto"
-            size="lg"
-          >
-            <CirclePlus className="size-4" />
-            Add a pet
-          </Button>
-        </CardContent>
-      </div>
-    </Card>
   )
 }
 
@@ -263,11 +252,13 @@ const accentMap: Record<Accent, string> = {
 function SummaryCard({
   icon,
   label,
+  hint,
   value,
   accent,
 }: {
   icon: React.ReactNode
   label: string
+  hint?: string
   value: number
   accent: Accent
 }) {
@@ -278,22 +269,27 @@ function SummaryCard({
       transition={{ duration: 0.25 }}
     >
       <Card className="overflow-hidden">
-        <CardContent className="flex items-center gap-3 p-4 sm:p-5">
+        <CardContent className="flex items-start justify-between gap-3 p-4 sm:p-5">
+          <div className="min-w-0">
+            <div className="text-xs font-medium leading-snug text-muted-foreground line-clamp-2">
+              {label}
+            </div>
+            <div className="font-display mt-2 text-3xl font-semibold tabular-nums leading-none">
+              {value}
+            </div>
+            {hint ? (
+              <div className="mt-1.5 text-[11px] text-muted-foreground/80 line-clamp-1">
+                {hint}
+              </div>
+            ) : null}
+          </div>
           <div
             className={cn(
-              'flex size-10 shrink-0 items-center justify-center rounded-lg',
+              'flex size-9 shrink-0 items-center justify-center rounded-xl',
               accentMap[accent],
             )}
           >
             {icon}
-          </div>
-          <div className="min-w-0">
-            <div className="text-2xl font-semibold tabular-nums leading-none">
-              {value}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground line-clamp-1">
-              {label}
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -305,7 +301,7 @@ function SummaryCard({
 //  Quick actions
 // ─────────────────────────────────────────────
 
-function QuickActions() {
+function QuickActions({ onAddPet }: { onAddPet: () => void }) {
   const setSection = useApp((s) => s.setSection)
   const actions: {
     title: string
@@ -339,7 +335,7 @@ function QuickActions() {
       title: 'Add a new pet',
       desc: 'Create a lifelong profile.',
       icon: <CirclePlus className="size-5" />,
-      onClick: () => setSection('pets'),
+      onClick: onAddPet,
       accent: 'muted',
     },
   ]
@@ -356,7 +352,7 @@ function QuickActions() {
           onClick={a.onClick}
           whileHover={{ y: -2 }}
           whileTap={{ scale: 0.98 }}
-          className="group flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-accent/30"
+          className="surface surface-hover group flex flex-col gap-3 p-4 text-left"
         >
           <div
             className={cn(
@@ -394,7 +390,7 @@ function PetCard({ pet }: { pet: Pet }) {
       onClick={() => openPet(pet.id)}
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.99 }}
-      className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card text-left shadow-sm transition-colors hover:border-primary/40"
+      className="surface surface-hover group flex flex-col overflow-hidden text-left"
       aria-label={`Open ${pet.name}'s record`}
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
@@ -424,7 +420,7 @@ function PetCard({ pet }: { pet: Pet }) {
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold leading-tight">
+            <h3 className="font-display truncate text-lg font-semibold leading-tight">
               {pet.name}
             </h3>
             <p className="truncate text-xs text-muted-foreground">
@@ -481,7 +477,7 @@ function AddPetCard({ onClick }: { onClick: () => void }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-card/50 p-6 text-center transition-colors hover:border-primary/50 hover:bg-accent/30"
+      className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card/50 p-6 text-center transition-colors hover:border-primary/50 hover:bg-accent/30"
     >
       <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
         <CirclePlus className="size-5" />

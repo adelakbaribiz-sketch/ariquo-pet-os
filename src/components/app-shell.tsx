@@ -21,6 +21,7 @@ import {
   Brain,
   Briefcase,
   CalendarCheck,
+  ChevronRight,
   Eye,
   Home as HomeIcon,
   LayoutDashboard,
@@ -29,6 +30,7 @@ import {
   Moon,
   PawPrint,
   ScanSearch,
+  ShieldCheck,
   Search,
   Store,
   Stethoscope,
@@ -44,9 +46,6 @@ import { QueryProvider } from '@/components/query-provider'
 
 // Lazy-load section components so the initial bundle stays small and
 // Turbopack can code-split per view.
-const LandingPage = React.lazy(() =>
-  import('@/components/landing/landing-page').then((m) => ({ default: m.default })),
-)
 const DashboardHome = React.lazy(() =>
   import('@/components/dashboard/dashboard-home').then((m) => ({ default: m.DashboardHome })),
 )
@@ -92,6 +91,7 @@ interface NavItem {
   label: string
   icon: LucideIcon
   group: 'Overview' | 'AI Tools' | 'Services' | 'Professional'
+  badge?: string
 }
 
 const NAV: NavItem[] = [
@@ -108,7 +108,7 @@ const NAV: NavItem[] = [
 
   { section: 'marketplace', label: 'Marketplace', icon: Store, group: 'Services' },
 
-  { section: 'professional', label: 'Professional View', icon: Briefcase, group: 'Professional' },
+  { section: 'professional', label: 'Clinic Workspace', icon: Briefcase, group: 'Professional', badge: 'B2B' },
 ]
 
 // "pet-detail" is only meaningful with an active pet, so we don't show it
@@ -154,14 +154,14 @@ function SectionView({ section }: { section: AppSection }) {
 
 function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-        <PawPrint className="h-5 w-5" />
+    <div className="flex items-center gap-2.5">
+      <div className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-primary to-[oklch(0.42_0.09_175)] text-primary-foreground shadow-soft ring-1 ring-black/5">
+        <PawPrint className="h-[18px] w-[18px]" />
       </div>
       {!compact && (
         <div className="leading-none">
-          <div className="text-base font-semibold tracking-tight">Ariquo</div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="font-display text-[17px] font-semibold tracking-tight">Ariquo</div>
+          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
             Pet OS
           </div>
         </div>
@@ -175,20 +175,20 @@ function BrandMark({ compact = false }: { compact?: boolean }) {
 // ─────────────────────────────────────────────
 
 function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => setMounted(true), [])
   if (!mounted) {
     return <div className="h-9 w-9" aria-hidden />
   }
-  const isDark = theme === 'dark'
+  const isDark = resolvedTheme === 'dark'
   return (
     <Button
       variant="ghost"
       size="icon"
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="h-9 w-9"
+      className="h-9 w-9 text-muted-foreground hover:text-foreground"
     >
       {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </Button>
@@ -202,6 +202,7 @@ function ThemeToggle() {
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const section = useApp((s) => s.section)
   const setSection = useApp((s) => s.setSection)
+  const exitToLanding = useApp((s) => s.exitToLanding)
 
   const groups = React.useMemo(() => {
     const map: Record<NavItem['group'], NavItem[]> = {
@@ -214,30 +215,41 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
     return map
   }, [])
 
+  // Pet profile lives under "My Pets" in the nav.
+  const activeSection = section === 'pet-detail' ? 'pets' : section
+
   const handle = (s: AppSection) => {
     setSection(s)
     onNavigate?.()
   }
 
   return (
-    <nav className="flex h-full flex-col gap-1 p-3" aria-label="Primary">
-      <div className="px-2 py-3">
+    <nav className="flex h-full flex-col p-3" aria-label="Primary">
+      <button
+        type="button"
+        onClick={() => {
+          exitToLanding()
+          onNavigate?.()
+        }}
+        className="mb-2 rounded-xl px-2 py-3 text-left transition-colors hover:bg-sidebar-accent/60"
+        aria-label="Ariquo — back to website"
+      >
         <BrandMark />
-      </div>
+      </button>
 
-      <div className="flex-1 overflow-y-auto scroll-area-thin pr-1">
+      <div className="scroll-area-thin -mr-1 flex-1 overflow-y-auto pr-1">
         {(Object.keys(groups) as NavItem['group'][]).map((group) => {
           const items = groups[group]
           if (!items.length) return null
           return (
-            <div key={group} className="mb-3">
-              <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div key={group} className="mb-4">
+              <div className="px-3 pb-1.5 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80">
                 {group}
               </div>
-              <ul className="space-y-1">
+              <ul className="space-y-0.5">
                 {items.map((item) => {
                   const Icon = item.icon
-                  const active = section === item.section
+                  const active = activeSection === item.section
                   return (
                     <li key={item.section}>
                       <button
@@ -245,15 +257,31 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                         onClick={() => handle(item.section)}
                         aria-current={active ? 'page' : undefined}
                         className={cn(
-                          'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                          'min-h-[44px] text-left',
+                          'group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors',
+                          'min-h-[40px] text-left',
                           active
-                            ? 'bg-primary text-primary-foreground shadow-sm'
-                            : 'text-foreground/80 hover:bg-accent hover:text-accent-foreground',
+                            ? 'bg-card text-foreground shadow-soft ring-1 ring-border'
+                            : 'text-foreground/70 hover:bg-sidebar-accent hover:text-foreground',
                         )}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
+                        {active && (
+                          <span
+                            aria-hidden
+                            className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary"
+                          />
+                        )}
+                        <Icon
+                          className={cn(
+                            'h-4 w-4 shrink-0 transition-colors',
+                            active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+                          )}
+                        />
                         <span className="truncate">{item.label}</span>
+                        {item.badge && (
+                          <span className="ml-auto rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                            {item.badge}
+                          </span>
+                        )}
                       </button>
                     </li>
                   )
@@ -264,14 +292,23 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         })}
       </div>
 
-      <div className="mt-auto border-t pt-3">
-        <div className="flex items-center gap-2 px-2">
-          <Avatar className="h-8 w-8">
+      <div className="mt-3 space-y-3">
+        <div className="rounded-xl border bg-gradient-to-br from-primary/[0.07] to-accent/60 p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+            Observation, not diagnosis
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            AI screens and triages. Your veterinarian decides.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5 rounded-xl px-2 py-1.5">
+          <Avatar className="h-8 w-8 ring-2 ring-card">
             <AvatarImage src="https://i.pravatar.cc/150?img=47" alt="Sara Ahmadi" />
             <AvatarFallback>SA</AvatarFallback>
           </Avatar>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium">Sara Ahmadi</div>
+            <div className="truncate text-xs font-semibold">Sara Ahmadi</div>
             <div className="truncate text-[11px] text-muted-foreground">Berlin · Demo owner</div>
           </div>
         </div>
@@ -285,71 +322,69 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 // ─────────────────────────────────────────────
 
 function TopBar() {
-  const exitToLanding = useApp((s) => s.exitToLanding)
   const setSection = useApp((s) => s.setSection)
   const section = useApp((s) => s.section)
   const [mobileOpen, setMobileOpen] = React.useState(false)
 
-  const title = React.useMemo(() => {
-    const item = NAV.find((n) => n.section === section)
-    return item?.label ?? 'Ariquo'
-  }, [section])
+  const item = React.useMemo(() => NAV.find((n) => n.section === section), [section])
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-xl md:px-6 lg:px-8">
       {/* Mobile menu */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetTrigger asChild>
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="-ml-1 md:hidden"
             aria-label="Open navigation menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-72 p-0">
+        <SheetContent side="left" className="w-72 bg-sidebar p-0">
           <SheetTitle className="sr-only">Ariquo navigation</SheetTitle>
           <SidebarContent onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={exitToLanding}
-          className="gap-1.5 text-muted-foreground"
-        >
-          <PawPrint className="h-4 w-4" />
-          <span className="hidden sm:inline">Back to site</span>
-        </Button>
+      <div className="md:hidden">
+        <BrandMark compact />
       </div>
 
-      <div className="ml-2 hidden items-center gap-2 text-sm text-muted-foreground md:flex">
-        <span aria-hidden>·</span>
-        <span className="font-medium text-foreground">{title}</span>
-      </div>
+      <nav aria-label="Breadcrumb" className="hidden items-center gap-1.5 text-sm md:flex">
+        <span className="text-muted-foreground">{item?.group ?? 'Overview'}</span>
+        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
+        <span className="font-medium text-foreground">{item?.label ?? 'Ariquo'}</span>
+      </nav>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
         <Button
           variant="outline"
           size="sm"
-          className="hidden sm:inline-flex"
+          className="hidden h-9 gap-1.5 rounded-full border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100 hover:text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300 sm:inline-flex"
           onClick={() => setSection('ai-triage')}
         >
-          <Activity className="mr-1.5 h-4 w-4" />
+          <Activity className="h-4 w-4" />
           Quick triage
         </Button>
         <Button
           variant="default"
           size="sm"
-          className="hidden sm:inline-flex"
-          onClick={() => setSection('pets')}
+          className="hidden h-9 gap-1.5 rounded-full sm:inline-flex"
+          onClick={() => setSection('marketplace')}
         >
-          <PawPrint className="mr-1.5 h-4 w-4" />
-          My pets
+          <Store className="h-4 w-4" />
+          Book care
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 text-muted-foreground sm:hidden"
+          aria-label="Quick triage"
+          onClick={() => setSection('ai-triage')}
+        >
+          <Activity className="h-4 w-4" />
         </Button>
         <ThemeToggle />
       </div>
@@ -363,60 +398,58 @@ function TopBar() {
 
 export function AppShell() {
   const section = useApp((s) => s.section)
+  const activePetId = useApp((s) => s.activePetId)
 
   return (
     <QueryProvider>
-      <div className="flex min-h-screen flex-col bg-background">
-        <div className="flex flex-1 overflow-hidden">
-          {/* Desktop sidebar */}
-          <aside className="hidden w-64 shrink-0 border-r bg-sidebar/60 md:block">
-            <SidebarContent />
-          </aside>
+      <div className="flex min-h-dvh bg-background">
+        {/* Desktop sidebar — stays put while the content scrolls */}
+        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r bg-sidebar md:block">
+          <SidebarContent />
+        </aside>
 
-          {/* Main column */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TopBar />
-            <main className="flex-1 overflow-y-auto">
-              <React.Suspense
-                fallback={
-                  <div className="grid h-full place-items-center p-8">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
-                      <p className="text-sm">Loading…</p>
-                    </div>
+        {/* Main column */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar />
+          <main className="flex-1">
+            <React.Suspense
+              fallback={
+                <div className="grid min-h-[60vh] place-items-center p-8">
+                  <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
+                    <p className="text-sm">Loading…</p>
                   </div>
-                }
+                </div>
+              }
+            >
+              <motion.div
+                key={`${section}:${activePetId ?? ''}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8 lg:py-8"
               >
-                <motion.div
-                  key={section}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="mx-auto w-full max-w-6xl p-4 md:p-6 lg:p-8"
-                >
-                  <SectionView section={section} />
-                </motion.div>
-              </React.Suspense>
-            </main>
-          </div>
-        </div>
+                <SectionView section={section} />
+              </motion.div>
+            </React.Suspense>
+          </main>
 
-        {/* Sticky-to-bottom footer (natural push when content overflows) */}
-        <footer className="border-t bg-background">
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-start justify-between gap-2 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:px-8">
-            <div className="flex items-center gap-2">
-              <PawPrint className="h-3.5 w-3.5" />
-              <span>
-                <strong className="font-semibold text-foreground">Ariquo</strong> · Pet/Animal
-                Operating System
-              </span>
+          <footer className="border-t">
+            <div className="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-2 px-4 py-4 text-xs text-muted-foreground md:flex-row md:items-center md:px-6 lg:px-8">
+              <div className="flex items-center gap-2">
+                <PawPrint className="h-3.5 w-3.5" />
+                <span>
+                  <strong className="font-semibold text-foreground">Ariquo</strong> · Pet
+                  Operating System · Prototype
+                </span>
+              </div>
+              <p className="max-w-xl leading-relaxed">
+                AI provides observation &amp; screening only — not a definitive veterinary
+                diagnosis. &ldquo;Ariquo&rdquo; is a working name.
+              </p>
             </div>
-            <p className="max-w-xl leading-relaxed">
-              AI provides observation &amp; screening only — not a definitive veterinary
-              diagnosis. Working name — not a final brand.
-            </p>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </div>
     </QueryProvider>
   )

@@ -52,3 +52,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+# local SQLite databases (demo data is reproducible via `bun run db:seed`)
+*.db
+*.db-journal
+/prisma/db/
+/db/*.db
+
+# allow the placeholder env template
+!.env.example

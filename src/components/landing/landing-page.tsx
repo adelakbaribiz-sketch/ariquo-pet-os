@@ -159,7 +159,7 @@ function SectionHeading({
           {eyebrow}
         </span>
       ) : null}
-      <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-balance">
+      <h2 className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight text-balance">
         {title}
       </h2>
       {description ? (
@@ -327,7 +327,7 @@ function Navbar() {
 const HERO_STATS = [
   { label: 'AI modules', value: '10' },
   { label: 'Service categories', value: '8' },
-  { label: 'Lifelong record', value: '∞' },
+  { label: 'Pet identity', value: 'Free' },
 ] as const
 
 function Hero() {
@@ -363,7 +363,7 @@ function Hero() {
             </Badge>
             <h1
               id="hero-heading"
-              className="text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl"
+              className="font-display text-[2.6rem] leading-[1.05] font-semibold tracking-tight text-balance sm:text-6xl lg:text-[4.25rem]"
             >
               Give your pet a{' '}
               <span className="text-primary">lifelong digital home</span>
@@ -1006,7 +1006,7 @@ function ProfessionalSection() {
             </Badge>
             <h2
               id="professional-heading"
-              className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-balance"
+              className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight text-balance"
             >
               A professional dashboard on top of the same pet OS
             </h2>
@@ -1028,14 +1028,9 @@ function ProfessionalSection() {
                 size="lg"
                 variant="outline"
                 className="h-11 min-h-11"
-                onClick={() =>
-                  toast('Sales contact', {
-                    description:
-                      'A team member will reach out — pro tier includes API & SSO.',
-                  })
-                }
+                onClick={() => enterApp('professional')}
               >
-                Contact sales
+                Explore the clinic demo
               </Button>
             </div>
           </motion.div>
@@ -1139,13 +1134,9 @@ function PricingSection() {
         'Records API & integrations',
         'Priority support',
       ],
-      cta: 'Contact sales',
+      cta: 'Explore the clinic demo',
       highlight: false,
-      onClick: () =>
-        toast('Sales contact', {
-          description:
-            'Pro tier scales per clinic — reach out for a tailored plan in the €7–15/seat range.',
-        }),
+      onClick: () => enterApp('professional'),
     },
   ]
 
@@ -1159,7 +1150,7 @@ function PricingSection() {
         <SectionHeading
           eyebrow="Pricing"
           title="Free to start. €9/mo for the full AI layer."
-          description="Lifetime identity is always free. AI triage, vision, behaviour and nutrition unlock with Premium — designed to fit the €7–15/month range proposed in the dossier."
+          description="Lifetime identity is always free. AI triage, vision, behaviour and nutrition unlock with Premium — transparent monthly pricing, cancel any time."
         />
         <motion.div
           variants={staggerContainer}
@@ -1252,7 +1243,7 @@ function CTASection() {
             <div className="max-w-2xl">
               <h2
                 id="cta-heading"
-                className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-balance"
+                className="font-display text-3xl sm:text-4xl md:text-[2.75rem] font-semibold tracking-tight text-balance"
               >
                 Give your pet a lifelong digital home.
               </h2>
@@ -1326,7 +1317,7 @@ const FOOTER_COLUMNS: {
     links: [
       { label: 'About', href: '#top' },
       { label: 'For professionals', href: '#professional' },
-      { label: 'Contact sales', href: '#pricing' },
+      { label: 'Pricing', href: '#pricing' },
       { label: 'Privacy', href: '#top' },
     ],
   },

@@ -137,7 +137,7 @@ function BookingRow({ booking }: { booking: Booking }) {
     },
     onSuccess: () => {
       toast.success('Booking cancelled', {
-        description: `${booking.provider.name} has been notified.`,
+        description: `Status updated for ${booking.provider.name}.`,
       })
       void queryClient.invalidateQueries({ queryKey: ['bookings'] })
     },

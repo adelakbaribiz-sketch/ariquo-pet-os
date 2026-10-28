@@ -87,3 +87,43 @@ export const RISK_META: Record<
     ring: 'ring-border',
   },
 }
+
+// ─────────────────────────────────────────────
+//  URL hash <-> navigation state
+//  Keeps the single-page app deep-linkable and makes browser back/forward
+//  and refresh work: '' = landing, '#/app/<section>', '#/app/pet/<id>'.
+// ─────────────────────────────────────────────
+
+const SECTIONS: AppSection[] = [
+  'dashboard',
+  'pets',
+  'pet-detail',
+  'ai-triage',
+  'ai-vision',
+  'ai-nutrition',
+  'ai-behavior',
+  'marketplace',
+  'preventive',
+  'professional',
+  'lost-pet',
+]
+
+export function stateToHash(s: Pick<AppState, 'view' | 'section' | 'activePetId'>): string {
+  if (s.view === 'landing') return ''
+  if (s.section === 'pet-detail' && s.activePetId) return `#/app/pet/${s.activePetId}`
+  return `#/app/${s.section}`
+}
+
+export function applyHash(hash: string) {
+  const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean)
+  if (parts[0] !== 'app') {
+    useApp.setState({ view: 'landing' })
+    return
+  }
+  if (parts[1] === 'pet' && parts[2]) {
+    useApp.setState({ view: 'app', section: 'pet-detail', activePetId: decodeURIComponent(parts[2]) })
+    return
+  }
+  const section = SECTIONS.includes(parts[1] as AppSection) ? (parts[1] as AppSection) : 'dashboard'
+  useApp.setState({ view: 'app', section: section === 'pet-detail' ? 'pets' : section })
+}

@@ -214,7 +214,7 @@ export function BookingDialog({
     },
     onSuccess: () => {
       toast.success('Booking requested', {
-        description: `${provider.name} will confirm your appointment soon.`,
+        description: `Saved as pending in your bookings. Prototype: ${provider.name} is not notified automatically.`,
       })
       onOpenChange(false)
       // Reset form for next time.
