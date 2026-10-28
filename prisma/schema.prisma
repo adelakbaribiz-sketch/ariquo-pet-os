@@ -1,0 +1,211 @@
+// Ariquo — Pet / Animal Operating System
+// Prisma schema (SQLite). Designed for longitudinal pet data:
+// identity, health timeline, AI assessments, marketplace, professional workflows.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+//  People
+// ─────────────────────────────────────────────
+
+model Owner {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  avatarUrl String?
+  city      String?
+  country   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pets      Pet[]
+  bookings  Booking[]
+}
+
+model Provider {
+  id           String   @id @default(cuid())
+  name         String
+  type         String   // VETERINARIAN | GROOMER | BOARDING | WALKER | TRAINER | SITTER | TRANSPORT | PHARMACY | PET_SHOP
+  specialty    String?
+  clinic       String?
+  city         String
+  country      String
+  address      String?
+  phone        String?
+  email        String?
+  avatarUrl    String?
+  rating       Float    @default(0)
+  reviewCount  Int      @default(0)
+  verified     Boolean  @default(false)
+  bio          String?
+  services     Service[]
+  bookings     Booking[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+//  Animals
+// ─────────────────────────────────────────────
+
+model Pet {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name          String
+  species       String   // DOG | CAT (MVP); future: BIRD | RABBIT | RODENT | REPTILE | FISH
+  breed         String?
+  sex           String?  // MALE | FEMALE | UNKNOWN
+  birthDate     DateTime?
+  weightKg      Float?
+  microchipId   String?
+  photoUrl      String?
+  color         String?
+  neutered      Boolean  @default(false)
+  allergies     String? // comma-separated (display friendly)
+  notes         String?
+  status        String   @default("ACTIVE") // ACTIVE | LOST | DECEASED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  events        MedicalEvent[]
+  vaccines      Vaccine[]
+  medications   Medication[]
+  assessments   AIAssessment[]
+  weightLogs    WeightLog[]
+  reminders     Reminder[]
+  documents     Document[]
+  bookings      Booking[]
+}
+
+model WeightLog {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  weightKg  Float
+  loggedAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+//  Longitudinal Health Record
+// ─────────────────────────────────────────────
+
+model MedicalEvent {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  type      String   // VACCINATION | MEDICATION | LAB | IMAGING | SURGERY | VISIT | SYMPTOM | PROCEDURE | NOTE
+  title     String
+  date      DateTime
+  notes     String?
+  severity  String   @default("ROUTINE") // ROUTINE | OBSERVATION | WARNING | EMERGENCY
+  createdAt DateTime @default(now())
+}
+
+model Vaccine {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  name      String
+  date      DateTime
+  nextDue   DateTime?
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model Medication {
+  id           String   @id @default(cuid())
+  petId        String
+  pet          Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  name         String
+  dose         String?
+  frequency    String?
+  startDate    DateTime @default(now())
+  endDate      DateTime?
+  active       Boolean  @default(true)
+  notes        String?
+  createdAt     DateTime @default(now())
+}
+
+model Document {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  name      String
+  type      String   // LAB_REPORT | XRAY | PRESCRIPTION | RECEIPT | INSURANCE | OTHER
+  fileUrl   String?
+  notes     String?
+  uploadedAt DateTime @default(now())
+}
+
+model Reminder {
+  id        String   @id @default(cuid())
+  petId     String
+  pet       Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  title     String
+  type      String   // VACCINE | MEDICATION | VET_APPOINTMENT | GROOMING | OTHER
+  dueAt     DateTime
+  done      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+//  AI Assessments (longitudinal, auditable)
+// ─────────────────────────────────────────────
+
+model AIAssessment {
+  id           String   @id @default(cuid())
+  petId        String
+  pet          Pet      @relation(fields: [petId], references: [id], onDelete: Cascade)
+  module       String   // SYMPTOM | VISION_SKIN | VISION_DENTAL | VISION_EYE | VISION_EAR | NUTRITION | BEHAVIOR | MOBILITY | TRIAGE
+  inputText    String?
+  inputImage   String?
+  observations String?
+  riskLevel    String   @default("UNKNOWN") // UNKNOWN | OBSERVATION | MONITOR | VET_SOON | EMERGENCY
+  confidence   Float    @default(0)
+  recommendations String?
+  escalation   String?
+  createdAt    DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+//  Marketplace
+// ─────────────────────────────────────────────
+
+model Service {
+  id          String   @id @default(cuid())
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  durationMins Int?
+  priceFrom   Float?
+  category    String   // CONSULTATION | GROOMING | BOARDING | WALKING | TRAINING | TRANSPORT | PRODUCT
+  createdAt   DateTime @default(now())
+  bookings    Booking[]
+}
+
+model Booking {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  providerId  String
+  provider    Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  petId       String?
+  pet         Pet?     @relation(fields: [petId], references: [id], onDelete: SetNull)
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  scheduledAt DateTime
+  status      String   @default("PENDING") // PENDING | CONFIRMED | COMPLETED | CANCELLED
+  notes       String?
+  price       Float?
+  createdAt   DateTime @default(now())
+}
